@@ -4,7 +4,8 @@ import math
 import time
 import matplotlib.pyplot as plt
 import os
-from render import Demo
+import render
+# from render import Demo
 
 #####################  hyper parameters  ####################
 LOCATION = "KAIST"
@@ -513,7 +514,7 @@ class Env():
         time.sleep(0.5)
 
     def initial_demo(self):
-        self.canvas = Demo(self.E, self.U, self.O, MAX_EP_STEPS)
+        self.canvas = render.Demo(self.E, self.U, self.O, MAX_EP_STEPS)
 
     def demo(self):
         self.canvas.draw(self.E, self.U, self.O)

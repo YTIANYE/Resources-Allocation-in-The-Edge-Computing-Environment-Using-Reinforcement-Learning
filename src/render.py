@@ -3,6 +3,9 @@ import random
 import numpy as np
 import math
 
+from src.env import LOCATION
+
+
 def dispatch_color(edge_color , E):
     for egde_id in range(len(E)):
         color = '#' + str("%03d" % random.randint(0, 255))[2:] + str("%03d" % random.randint(0, 255))[2:] + str("%03d" %random.randint(0, 255))[2:]

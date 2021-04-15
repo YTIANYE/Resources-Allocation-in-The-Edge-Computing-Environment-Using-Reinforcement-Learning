@@ -3,7 +3,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import os
-from render import Demo
+import render
 
 #####################  hyper parameters  ####################
 LOCATION = "KAIST"
@@ -78,8 +78,9 @@ def get_minimum():
     for data_num in range(TXT_NUM):
         data_name = str("%03d" % (data_num + 1))  # plus zero
         file_name = LOCATION + "_30sec_" + data_name + ".txt"
-        file_path = "data/" + LOCATION + "/" + file_name
+        file_path = "../data/" + LOCATION + "/" + file_name
         f = open(file_path, "r")
+        print(f)
         f1 = f.readlines()
         # get line_num
         line_num = 0
@@ -107,7 +108,7 @@ def proper_edge_loc(edge_num):
         for data_num in range(base, base + group_num):
             data_name = str("%03d" % (data_num + 1))  # plus zero
             file_name = LOCATION + "_30sec_" + data_name + ".txt"
-            file_path = "data/" + LOCATION + "/" + file_name
+            file_path = "../data/" + LOCATION + "/" + file_name
             f = open(file_path, "r")
             f1 = f.readlines()
             # get line_num and initial data
@@ -140,7 +141,7 @@ class UE():
         # calculate num_step and define self.mob
         data_num = str("%03d" % (data_num + 1))  # plus zero
         file_name = LOCATION + "_30sec_" + data_num + ".txt"
-        file_path = "data/" + LOCATION + "/" + file_name
+        file_path = "../data/" + LOCATION + "/" + file_name
         f = open(file_path, "r")
         f1 = f.readlines()
         data = 0
@@ -561,7 +562,7 @@ class Env():
         print("=====================update==============================")
 
     def initial_screen_demo(self):
-        self.canvas = Demo(self.E, self.U, self.O, MAX_EP_STEPS)
+        self.canvas = render.Demo(self.E, self.U, self.O, MAX_EP_STEPS)
 
     def screen_demo(self):
         self.canvas.draw(self.E, self.U, self.O)
