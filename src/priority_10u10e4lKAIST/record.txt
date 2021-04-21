@@ -1,0 +1,34 @@
+time(s):3000
+
+user_number:10
+
+edge_number:10
+
+limit:4
+
+Episode   0:  7496
+Episode   1:  7491
+Episode   2:  7492
+Episode   3:  7495
+Episode   4:  7492
+Episode   5:  7493
+Episode   6:  7494
+Episode   7:  7491
+Episode   8:  7494
+Episode   9:  7491
+Episode  10:  7493
+Episode  11:  7496
+Episode  12:  7494
+Episode  13:  7495
+Episode  14:  7493
+Episode  15:  7495
+Episode  16:  7493
+Episode  17:  7495
+Episode  18:  7493
+Episode  19:  7494
+the mean of the rewards:7493.5
+
+the standard deviation of the rewards:1.5329709716755893
+
+the range of the rewards:5
+

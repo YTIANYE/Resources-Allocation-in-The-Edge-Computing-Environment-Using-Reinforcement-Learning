@@ -114,7 +114,7 @@ def proper_edge_loc(edge_num):
         for data_num in range(base, base + group_num):
             data_name = str("%03d" % (data_num + 1))  # plus zero
             file_name = LOCATION + "_30sec_" + data_name + ".txt"
-            file_path = LOCATION + "/" + file_name
+            file_path = "../data/" + LOCATION + "/" + file_name
             f = open(file_path, "r")
             f1 = f.readlines()
             # get line_num and initial data
@@ -147,7 +147,7 @@ class UE():
         # calculate num_step and define self.mob
         data_num = str("%03d" % (data_num + 1))  # plus zero
         file_name = LOCATION + "_30sec_" + data_num + ".txt"
-        file_path = LOCATION + "/" + file_name
+        file_path = "../data/" + LOCATION + "/" + file_name
         f = open(file_path, "r")
         f1 = f.readlines()
         data = 0

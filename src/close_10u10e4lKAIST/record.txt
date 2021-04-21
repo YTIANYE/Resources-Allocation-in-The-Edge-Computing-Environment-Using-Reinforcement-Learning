@@ -1,0 +1,24 @@
+time(s):3000
+
+user_number:10
+
+edge_number:10
+
+limit:4
+
+Episode   0:  6479
+Episode   1:  7109
+Episode   2:  7162
+Episode   3:  6584
+Episode   4:  7074
+Episode   5:  7177
+Episode   6:  7152
+Episode   7:  6517
+Episode   8:  7335
+Episode   9:  7431
+the mean of the rewards:7002.0
+
+the standard deviation of the rewards:327.6836889440791
+
+the range of the rewards:952
+

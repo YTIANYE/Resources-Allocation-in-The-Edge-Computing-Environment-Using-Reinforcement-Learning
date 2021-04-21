@@ -5,6 +5,7 @@ import time
 import matplotlib.pyplot as plt
 import os
 import render
+
 # from render import Demo
 
 #####################  hyper parameters  ####################
@@ -15,8 +16,10 @@ LIMIT = 4
 LEARNING_MAX_EPISODE = 10
 MAX_EP_STEPS = 3000
 TXT_NUM = 92
-TEXT_RENDER = False
+# TEXT_RENDER = False
+TEXT_RENDER = True
 SCREEN_RENDER = True
+
 
 #####################  function  ####################
 def trans_rate(user_loc, edge_loc):
@@ -27,21 +30,25 @@ def trans_rate(user_loc, edge_loc):
     N = 1e-10
     return B * math.log2(1 + P * h / N)
 
+
 def BandwidthTable(edge_num):
     BandwidthTable = np.zeros((edge_num, edge_num))
     for i in range(0, edge_num):
-        for j in range(i+1, edge_num):
-                BandwidthTable[i][j] = 1e9
+        for j in range(i + 1, edge_num):
+            BandwidthTable[i][j] = 1e9
     return BandwidthTable
 
+
+#   降维成一行
 def two_to_one(two_table):
-    one_table = two_table.flatten()
+    one_table = two_table.flatten()  # 默认按行的方向降维
     return one_table
 
-def generate_state( R, O, two_table, U):
+
+def generate_state(R, O, two_table, U):
     # initial
     one_table = two_to_one(two_table)
-    S = np.zeros((R.size + O.size + one_table.size + len(U)*2))
+    S = np.zeros((R.size + O.size + one_table.size + len(U) * 2))
     # transform
     count = 0
     # R
@@ -64,18 +71,18 @@ def generate_state( R, O, two_table, U):
         count += 1
     return S
 
-def proper_edge_loc(edge_num):
 
+def proper_edge_loc(edge_num):
     # initial the e_l
     e_l = np.zeros((edge_num, 2))
     # calculate the mean of the data
     group_num = math.floor(TXT_NUM / edge_num)
     edge_id = 0
-    for base in range(0, group_num*edge_num, group_num):
+    for base in range(0, group_num * edge_num, group_num):
         for data_num in range(base, base + group_num):
             data_name = str("%03d" % (data_num + 1))  # plus zero
             file_name = LOCATION + "_30sec_" + data_name + ".txt"
-            file_path = LOCATION + "/" + file_name
+            file_path = "../data/" + LOCATION + "/" + file_name
             f = open(file_path, "r")
             f1 = f.readlines()
             # get line_num and initial data
@@ -93,10 +100,11 @@ def proper_edge_loc(edge_num):
             if data_num % group_num == 0:
                 cal = data
             else:
-                cal = np.vstack((cal,data))
+                cal = np.vstack((cal, data))
         e_l[edge_id] = np.mean(cal, axis=0)
         edge_id += 1
     return e_l
+
 
 #############################UE###########################
 class UE():
@@ -108,7 +116,7 @@ class UE():
         # calculate num_step and define self.mob
         data_num = str("%03d" % (data_num + 1))  # plus zero
         file_name = LOCATION + "_30sec_" + data_num + ".txt"
-        file_path = LOCATION + "/" + file_name
+        file_path = "../data/" + LOCATION + "/" + file_name
         f = open(file_path, "r")
         f1 = f.readlines()
         data = 0
@@ -161,11 +169,12 @@ class UE():
 
     def mobility_update(self, time):  # t: second
         if time < len(self.mob[:, 0]):
-            self.loc[0] = self.mob[time]   # x
+            self.loc[0] = self.mob[time]  # x
 
         else:
             self.loc[0][0] = np.inf
             self.loc[0][1] = np.inf
+
 
 class Request():
     def __init__(self, user_id, edge_id):
@@ -174,8 +183,8 @@ class Request():
         self.edge_id = edge_id
         self.edge_loc = 0
         # state
-        self.state = 5     # 5: not connect
-        self.pre_state=5
+        self.state = 5  # 5: not connect
+        self.pre_state = 5
         # transmission size
         self.u2e_size = 0
         self.process_size = 0
@@ -189,6 +198,7 @@ class Request():
         # timer
         self.timer = 0
 
+
 class TaskType():
     def __init__(self):
         ##Objection detection: VOC SSD512
@@ -198,8 +208,11 @@ class TaskType():
         self.req_e2u_size = 4 * 4 + 20 * 4
         # migration
         self.migration_size = 2e9
+
     def task_inf(self):
-        return "req_u2e_size:" + str(self.req_u2e_size) + "\nprocess_loading:" + str(self.process_loading) + "\nreq_e2u_size:" + str(self.req_e2u_size)
+        return "req_u2e_size:" + str(self.req_u2e_size) + "\nprocess_loading:" + str(
+            self.process_loading) + "\nreq_e2u_size:" + str(self.req_e2u_size)
+
 
 #############################EdgeServer###################
 
@@ -222,19 +235,17 @@ class EdgeServer():
             # maintain the request
             if user.req.edge_id == self.edge_id and self.capability - R[user.user_id] > 0:
                 # maintain the preliminary connection
-                if user.req.user_id not in self.user_group and self.connection_num+1 <= self.limit:
+                if user.req.user_id not in self.user_group and self.connection_num + 1 <= self.limit:
                     # first time : do not belong to any edge(user_group)
                     self.user_group.append(user.user_id)  # add to the user_group
                     user.req.state = 0  # prepare to connect
                     # notify the request
-                    user.req.edge_id = self. edge_id
+                    user.req.edge_id = self.edge_id
                     user.req.edge_loc = self.loc
 
                 # dispatch the resource
                 user.req.resource = R[user.user_id]
                 self.capability -= R[user.user_id]
-
-
 
     def migration_update(self, O, B, table, U, E):
 
@@ -253,7 +264,7 @@ class EdgeServer():
                         # start migration
                         U[user_id].req.mig_size = U[user_id].req.tasktype.migration_size
                         U[user_id].req.mig_size -= B[user_id]
-                        #print("user", U[user_id].req.user_id, ":migration step 1")
+                        # print("user", U[user_id].req.user_id, ":migration step 1")
                     # first try to migration(step 1)
                     elif U[user_id].req.state != 6:
                         table[ini_edge][target_edge] -= B[user_id]
@@ -264,14 +275,14 @@ class EdgeServer():
                         U[user_id].req.pre_state = U[user_id].req.state
                         # on the way to migration, disconnect to the old edge
                         U[user_id].req.state = 6
-                        #print("user", U[user_id].req.user_id, ":migration step 1")
+                        # print("user", U[user_id].req.user_id, ":migration step 1")
                     elif U[user_id].req.state == 6 and target_edge == U[user_id].req.last_offlaoding:
                         # keep migration(step 2)
                         if U[user_id].req.mig_size > 0:
                             # reduce the bandwidth
                             table[ini_edge][target_edge] -= B[user_id]
                             U[user_id].req.mig_size -= B[user_id]
-                            #print("user", U[user_id].req.user_id, ":migration step 2")
+                            # print("user", U[user_id].req.user_id, ":migration step 2")
                         # end the migration(step 3)
                         else:
                             # the number of the connection user
@@ -279,9 +290,10 @@ class EdgeServer():
                             for target_user_id in E[target_edge].user_group:
                                 if U[target_user_id].req.state != 6:
                                     target_connection_num += 1
-                            #print("user", U[user_id].req.user_id, ":migration step 3")
+                            # print("user", U[user_id].req.user_id, ":migration step 3")
                             # change to another edge
-                            if E[target_edge].capability - U[user_id].req.resource >= 0 and target_connection_num + 1 <= E[target_edge].limit:
+                            if E[target_edge].capability - U[user_id].req.resource >= 0 and target_connection_num + 1 <= \
+                                    E[target_edge].limit:
                                 # register in the new edge
                                 E[target_edge].capability -= U[user_id].req.resource
                                 E[target_edge].user_group.append(user_id)
@@ -292,16 +304,16 @@ class EdgeServer():
                                 U[user_id].req.edge_loc = E[target_edge].loc
                                 # release the pre-state, continue to transmission process
                                 U[user_id].req.state = U[user_id].req.pre_state
-                                #print("user", U[user_id].req.user_id, ":migration finish")
-            #store pre_offloading
+                                # print("user", U[user_id].req.user_id, ":migration finish")
+            # store pre_offloading
             U[user_id].req.last_offlaoding = int(O[user_id])
 
         return table
 
-
-    #release the all resource
+    # release the all resource
     def release(self):
         self.capability = 1e9 * 0.063
+
 
 #############################Policy#######################
 
@@ -319,7 +331,7 @@ class close_policy():
             O[user.user_id] = priority[0]
         return O
 
-    def resource_update(self, R, E ,U):
+    def resource_update(self, R, E, U):
         for edge in E:
             # count the number of the connection user
             connect_num = 0
@@ -333,10 +345,10 @@ class close_policy():
                     R[user_id] = 0
                 # provide resource to connecting users
                 else:
-                    R[user_id] = edge.capability/(connect_num+2)  # reserve the resource to those want to migration
+                    R[user_id] = edge.capability / (connect_num + 2)  # reserve the resource to those want to migration
         return R
 
-    def bandwidth_update(self, O, table, B ,U, E):
+    def bandwidth_update(self, O, table, B, U, E):
         for user in U:
             share_number = 1
             ini_edge = int(user.req.edge_id)
@@ -358,6 +370,7 @@ class close_policy():
                 B[user.req.user_id] = table[min(ini_edge, target_edge)][max(ini_edge, target_edge)] / (share_number + 2)
         return B
 
+
 #############################Env###########################
 
 class Env():
@@ -376,7 +389,7 @@ class Env():
         self.B = np.zeros((self.user_num))
         self.table = BandwidthTable(self.edge_num)
         self.priority = np.zeros((self.user_num, self.edge_num))
-        self. E = []
+        self.E = []
         self.loc = 0
         self.e_l = 0
         self.model = 0
@@ -518,6 +531,8 @@ class Env():
 
     def demo(self):
         self.canvas.draw(self.E, self.U, self.O)
+
+
 #############################Run###########################
 
 if __name__ == "__main__":
@@ -568,5 +583,5 @@ if __name__ == "__main__":
     f.write("the mean of the rewards:" + str(np.mean(ep_reward)) + '\n\n')
     print("the standard deviation of the rewards:", str(np.std(ep_reward)))
     f.write("the standard deviation of the rewards:" + str(np.std(ep_reward)) + '\n\n')
-    print("the range of the rewards:", str(max(ep_reward)-min(ep_reward)))
-    f.write("the range of the rewards:" + str(max(ep_reward)-min(ep_reward)) + '\n\n')
+    print("the range of the rewards:", str(max(ep_reward) - min(ep_reward)))
+    f.write("the range of the rewards:" + str(max(ep_reward) - min(ep_reward)) + '\n\n')
