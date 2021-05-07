@@ -11,21 +11,21 @@ LEARNING_MAX_EPISODE = 10       # 最大reward 10个episode不变后，结束
 MAX_EP_STEPS = 3000     # 每个episode中最大的steps
 # TEXT_RENDER = False
 TEXT_RENDER = True  # 控制是否打印过程
-SCREEN_RENDER = True  # 控制是否图像形式显示
+SCREEN_RENDER = False  # 控制是否图像形式显示
 CHANGE = False      # 记录max_rewards是否发生改变
 SLEEP_TIME = 0.1    # 每个episode需要进程挂起 0.1s 的时间
 
 
 #####################  function  ####################
-# add randomness to action selection for exploration
+# add randomness to action selection for exploration        为了探索，向action的选择添加随机性
 def exploration(a, r_dim, b_dim, r_var, b_var):
     for i in range(r_dim + b_dim):
-        # resource
-        if i < r_dim:
-            a[i] = np.clip(np.random.normal(a[i], r_var), 0, 1) * r_bound
+        # resource  随机分配资源
+        if i < r_dim:       # r_bound 最大资源容量
+            a[i] = np.clip(np.random.normal(a[i], r_var), 0, 1) * r_bound       # 正态分布 numpy.random.normal(loc=0,scale=1e-2,size=shape), 参数loc(float)：正态分布的均值，对应着这个分布的中心,  参数scale(float)：正态分布的标准差，对应分布的宽度，scale越大，正态分布的曲线越矮胖，scale越小，曲线越高瘦。
         # bandwidth
         elif i < r_dim + b_dim:
-            a[i] = np.clip(np.random.normal(a[i], b_var), 0, 1) * b_bound
+            a[i] = np.clip(np.random.normal(a[i], b_var), 0, 1) * b_bound       # np.clip是一个截取函数，用于截取数组中小于或者大于某值的部分，并使得被截取部分等于固定值
     return a
 
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     max_rewards = 0
     episode = 0
-    var_counter = 0     # 帮助计数，不超过最大学习的episode数
+    var_counter = 0     # 帮助计数，不超过 最大学习的episode的数
     epoch_inf = []      # 记录每个episode的打印信息 Episode Reward r_var b_var
 
 
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     while var_counter < LEARNING_MAX_EPISODE:       # LEARNING_MAX_EPISODE = 10
         # initialize
         s = env.reset()
+        #TODO 为什么添加一个 0
         ep_reward.append(0)
         if SCREEN_RENDER:
             env.initial_screen_demo()       # 初始化屏幕
@@ -72,28 +73,28 @@ if __name__ == "__main__":
             if SCREEN_RENDER:
                 env.screen_demo()       # 绘制节点服务器分布情况
             if TEXT_RENDER and j % 30 == 0:     # 每个MAX_EP_STEPS打印100次
-                env.text_render()       # 打印RBO、user、edge、reward
+                env.text_render()       # 打印RBO、user、edge、reward 等
 
             # DDPG
-            # choose action according to state
-            a = ddpg.choose_action(s)  # a = [R B O]
-            # add randomness to action selection for exploration
+            # choose action according to state      根据state选择action
+            a = ddpg.choose_action(s)  # a = [R B O]    len：120
+            # add randomness to action selection for exploration        为了探索，向action的选择中添加随机性：a中的资源、带宽随机分配
             a = exploration(a, r_dim, b_dim, r_var, b_var)
             # store the transition parameter
             s_, r = env.ddpg_step_forward(a, r_dim, b_dim)
-            ddpg.store_transition(s, a, r / 10, s_)     # s a r s'
+            ddpg.store_transition(s, a, r / 10, s_)     # s a r s'      # TODO r/10 为什么
             # learn
-            if ddpg.pointer == ddpg.memory_capacity:
+            if ddpg.pointer == ddpg.memory_capacity:        # 当预制存储空间装满了，进行学习
                 print("start learning")
             if ddpg.pointer > ddpg.memory_capacity:
                 ddpg.learn()
-                if CHANGE:      # max_rewards发生改变，更新r_var， b_var
+                if CHANGE:      # max_rewards发生改变，更新r_var， b_var    只有在var_counter = 0的时候，不断修正r_var和b_var
                     r_var *= .99999
                     b_var *= .99999
             # replace the state
             s = s_
             # sum up the reward
-            ep_reward[episode] += r
+            ep_reward[episode] += r     # TODO 有些奇怪，为什么这么操作？为什么第一次episode = 3   CHECK_EPISODE = 4
             # in the end of the episode
             if j == MAX_EP_STEPS - 1:       # 最后一个episode
                 var_reward.append(ep_reward[episode])
@@ -103,11 +104,11 @@ if __name__ == "__main__":
                 print('Episode:%3d' % episode, ' Reward: %5d' % ep_reward[episode], '###  r_var: %.2f ' % r_var, 'b_var: %.2f ' % b_var, )
                 string = 'Episode:%3d' % episode + ' Reward: %5d' % ep_reward[episode] + '###  r_var: %.2f ' % r_var + 'b_var: %.2f ' % b_var
                 epoch_inf.append(string)
-                # variation change  ，大于4个episode并且后4个的平均reward >= max_rewards 时
+                # variation change  ，大于4个（多数情况是5个）episode并且后4个的平均reward >= max_rewards 时
                 if var_counter >= CHECK_EPISODE and np.mean(var_reward[-CHECK_EPISODE:]) >= max_rewards:        # CHECK_EPISODE = 4 # mean()函数功能：求取均值
                     CHANGE = True       # 记录max_rewards发生改变
                     var_counter = 0     # 一旦max_rewards发生改变，从新开始学习
-                    max_rewards = np.mean(var_reward[-CHECK_EPISODE:])      # 记录最新的max_rewards
+                    max_rewards = np.mean(var_reward[-CHECK_EPISODE:])      # 记录最新的max_rewards,取后四个平均值
                     var_reward = []
                 else:
                     CHANGE = False
@@ -126,7 +127,7 @@ if __name__ == "__main__":
     # make directory    新建输出文件夹，文件夹名包含：user数目、edge数目、限制limit、位置
     dir_name = 'output/' + 'ddpg_' + str(r_dim) + 'u' + str(int(o_dim / r_dim)) + 'e' + str(limit) + 'l' + location
     if os.path.isdir(dir_name):     # 用于判断对象是否为一个目录
-        os.rmdir(dir_name)      # os.rmdir() 方法用于删除指定路径的目录
+        os.rmdir(dir_name)      # os.rmdir() 函数只能用于删除空目录        删除非空目录的方法shutil.rmtree()
     os.makedirs(dir_name)
 
     # plot the reward

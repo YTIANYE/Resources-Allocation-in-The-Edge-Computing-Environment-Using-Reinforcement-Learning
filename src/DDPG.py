@@ -17,7 +17,7 @@ OUTPUT_GRAPH = True
 
 class DDPG(object):
     def __init__(self, s_dim, r_dim, b_dim, o_dim, r_bound, b_bound):
-        self.memory_capacity = 10000
+        self.memory_capacity = 10000        # 预制存储空间大小，用于存储每次（s, a, r, s_）的结果，空间满了需要用pointer覆盖
         # dimension
         self.s_dim = s_dim      # 140
         self.a_dim = r_dim + b_dim + o_dim      # action存储大小，120个 []
@@ -33,7 +33,7 @@ class DDPG(object):
         self.R = tf.placeholder(tf.float32, [None, 1], 'r')
         # memory
         self.memory = np.zeros((self.memory_capacity, s_dim * 2 + self.a_dim + 1), dtype=np.float32)  # s_dim + a_dim + r + s_dim = 401 ，memory_capacity = 10000行，401列
-        self.pointer = 0
+        self.pointer = 0        # 记录存储空间位置的指针
         # session
         self.sess = tf.Session()        # Session 是 Tensorflow 为了控制,和输出文件的执行的语句. 运行 session.run() 可以获得你要得知的运算结果, 或者是你所要运算的部分.
 
@@ -76,24 +76,27 @@ class DDPG(object):
         if OUTPUT_GRAPH:
             tf.summary.FileWriter("logs/", self.sess.graph)
 
+    # 传入state 选择 action
     def choose_action(self, s):
-        return self.sess.run(self.a, {self.S: s[np.newaxis, :]})[0]
+        # 用feed_dict以字典的方式填充占位 print(sess.run(output, feed_dict={input1:[8.],input2:[2.]}))
+        return self.sess.run(self.a, {self.S: s[np.newaxis, :]})[0]     # 增加一个维度，比如说将(5,) 变成(1, 5)
 
     def learn(self):
         indices = np.random.choice(self.memory_capacity, size=BATCH_SIZE)
-        bt = self.memory[indices, :]
+        bt = self.memory[indices, :]        # memory中随机挑选32行数据
         bs = bt[:, :self.s_dim]
         ba = bt[:, self.s_dim: self.s_dim + self.a_dim]
         br = bt[:, -self.s_dim - 1: -self.s_dim]
         bs_ = bt[:, -self.s_dim:]
+        # TODO sess.run 怎么使用 ?      sess.run(output, feed_dict={input1,input2}) 用feed_dict以字典的方式填充占位
+        self.sess.run(self.atrain, {self.S: bs})        # a_params
+        self.sess.run(self.ctrain, {self.S: bs, self.a: ba, self.R: br, self.S_: bs_})  # c_params
 
-        self.sess.run(self.atrain, {self.S: bs})
-        self.sess.run(self.ctrain, {self.S: bs, self.a: ba, self.R: br, self.S_: bs_})
-
+    # store the transition parameter    每一行数据（s, a, r, s_）
     def store_transition(self, s, a, r, s_):
-        transition = np.hstack((s, a, [r], s_))
+        transition = np.hstack((s, a, [r], s_))     #  401列数据     np.hstack:按水平方向(列顺序)堆叠数组构成一个新的数组
         index = self.pointer % self.memory_capacity  # replace the old memory with new memory
-        self.memory[index, :] = transition
+        self.memory[index, :] = transition      # : 实际上是 401 列
         self.pointer += 1
 
     # 输入： a

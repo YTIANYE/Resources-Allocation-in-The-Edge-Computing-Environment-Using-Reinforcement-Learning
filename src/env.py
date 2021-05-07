@@ -10,17 +10,19 @@ LOCATION = "KAIST"
 USER_NUM = 10
 EDGE_NUM = 10
 LIMIT = 4  # 每个边缘服务器最多可以提供4种任务处理服务
-MAX_EP_STEPS = 3000
+MAX_EP_STEPS = 3000     # 每个episode最多的step数
 TXT_NUM = 92
 r_bound = 1e9 * 0.063
 b_bound = 1e9
 
 
 #####################  function  ####################
+# 传输速率
+# TODO 速率为什么是这么算？速率计算公式
 def trans_rate(user_loc, edge_loc):
-    B = 2e6
+    B = 2e6     # 带宽
     P = 0.25
-    d = np.sqrt(np.sum(np.square(user_loc[0] - edge_loc))) + 0.01
+    d = np.sqrt(np.sum(np.square(user_loc[0] - edge_loc))) + 0.01       # 直线距离    # TODO 加0.01是大概为了避免除数为0
     h = 4.11 * math.pow(3e8 / (4 * math.pi * 915e6 * d), 2)
     N = 1e-10
     return B * math.log2(1 + P * h / N)
@@ -164,7 +166,7 @@ class UE:
             data += 1
         # TODO *30是什么意思？ 大概是STEP = 30步，记录每一步的数据？
         self.num_step = data * 30
-        self.mob = np.zeros((self.num_step, 2))  # 数据移动的记录
+        self.mob = np.zeros((self.num_step, 2))  # 数据移动的记录  # 每30个一样的数为一组连续排列
 
         # write data to self.mob
         now_sec = 0
@@ -180,42 +182,45 @@ class UE:
     def generate_request(self, edge_id):
         self.req = Request(self.user_id, edge_id)       # 创建request实例，初始化   # __init__函数里不包含self.req
 
+    # request更新
     def request_update(self):
-        # default request.state == 5 means disconnection ,6 means migration
+        # default request.state == 5 means disconnection
         if self.req.state == 5:
-            self.req.timer += 1
+            self.req.timer += 1     # timer 记录请求次数
         else:
             self.req.timer = 0
-            if self.req.state == 0:
+            if self.req.state == 0:     # 还未启动的状态，没有数据传输，未分配出口大小
                 self.req.state = 1
-                self.req.u2e_size = self.req.tasktype.req_u2e_size
+                self.req.u2e_size = self.req.tasktype.req_u2e_size      # 初始化分配u2e大小    300 * 300 * 3 * 1
                 self.req.u2e_size -= trans_rate(self.loc, self.req.edge_loc)
-            elif self.req.state == 1:
+            elif self.req.state == 1:       # state 1 : start to offload a task to the edge server  准备卸载任务到服务器
                 if self.req.u2e_size > 0:
                     self.req.u2e_size -= trans_rate(self.loc, self.req.edge_loc)
                 else:
                     self.req.state = 2
-                    self.req.process_size = self.req.tasktype.process_loading
+                    self.req.process_size = self.req.tasktype.process_loading       # 300 * 300 * 3 * 4     最多负载4个，最多同时传输的数据大小
                     self.req.process_size -= self.req.resource
-            elif self.req.state == 2:
+            elif self.req.state == 2:       # state 2 : request task is on the way to the edge server (2.7 * 1e4 byte)  正在卸载任务到服务器
                 if self.req.process_size > 0:
                     self.req.process_size -= self.req.resource
                 else:
-                    self.req.state = 3
-                    self.req.e2u_size = self.req.tasktype.req_e2u_size
-                    self.req.e2u_size -= 10000  # value is small,so simplify
-            else:
+                    self.req.state = 3      # state 3 : request task is proccessed (1.08 * 1e6 byte)    服务器准备返回数据
+                    self.req.e2u_size = self.req.tasktype.req_e2u_size      # 4 * 4 + 20 * 4 = 96   # state 4 : request task is on the way back to the mobile user (96 byte)
+                    self.req.e2u_size -= 10000  # value is small,so simplify 价值很小，所以要简化    #TODO 为什么这么做？  为了使其变成负数？关闭e2u的输出？只能同时对一个user返回数据？
+            else:       # state 是 4或6       # state 6 : request task is migrated to another edge server
                 if self.req.e2u_size > 0:
-                    self.req.e2u_size -= 10000  # B*math.log(1+SINR(self.user.loc, self.offloading_serv.loc), 2)/(8*time_scale)
+                    self.req.e2u_size -= 10000      # TODO 意思是在迁移的时候？这个服务器的通道也占着？
+                    # B*math.log(1+SINR(self.user.loc, self.offloading_serv.loc), 2)/(8*time_scale)
                 else:
-                    self.req.state = 4
+                    self.req.state = 4      # state 4 : request task is on the way back to the mobile user (96 byte)    服务器正在返回数据
 
-    def mobility_update(self, time):  # t: second
-        if time < len(self.mob[:, 0]):
-            self.loc[0] = self.mob[time]  # x
-
+    # user位置移动更新
+    def mobility_update(self, time):  # t: second       # self是user
+        if time < len(self.mob[:, 0]):      # 还有位置数据可以移动
+            self.loc[0] = self.mob[time]  # （x, y）
+        # 移动数据用完了
         else:
-            self.loc[0][0] = np.inf
+            self.loc[0][0] = np.inf     # 正无穷大的浮点数
             self.loc[0][1] = np.inf
 
 
@@ -224,35 +229,36 @@ class Request:
     def __init__(self, user_id, edge_id):
         # id
         self.user_id = user_id  # 发出请求的用户id
-        self.edge_id = edge_id  # 请求的edge id
+        self.edge_id = edge_id  # 请求的edge id    # TODO 为什么float形式存储，edge本身的id是int
         self.edge_loc = 0
         # state
         self.state = 5  # 5: not connect
-        self.pre_state = 5
+        self.pre_state = 5      # 迁移时记录上一个状态，以便迁移完成后恢复
         # transmission size
-        self.u2e_size = 0
-        self.process_size = 0
+        self.u2e_size = 0       # u2e user端出口大小
+        self.process_size = 0       # 传输过程资源的大小/edge端向user传输中的数据大小的剩余容量
         self.e2u_size = 0
         # edge state
-        self.resource = 0
-        self.mig_size = 0
+        self.resource = 0       # 请求资源的大小/edge给user资源的大小
+        self.mig_size = 0       # 需要迁移的内容的大小        #TODO 这个内容具体是什么呢
         # tasktype
         self.tasktype = TaskType()
-        self.last_offlaoding = 0
+        self.last_offlaoding = 0        #   最终要达到的edge，迁移过程中会经过许多个edge
         # timer
-        self.timer = 0
+        self.timer = 0      # 记录请求次数
 
 
 # 任务类型，即各项限制条件，参数， 包含 传播 迁移
 class TaskType:
     def __init__(self):
         ##Objection detection: VOC SSD300
+        # TODO 这是有一个什么标准吗
         # transmission
         self.req_u2e_size = 300 * 300 * 3 * 1
         self.process_loading = 300 * 300 * 3 * 4  # 卸载大小
         self.req_e2u_size = 4 * 4 + 20 * 4
         # migration
-        self.migration_size = 2e9  # 迁移大小
+        self.migration_size = 2e9  # 迁移大小   #TODO 每次固定迁移的大小是这些吗，迁移的最小单位
 
     # 返回任务信息
     def task_inf(self):
@@ -268,52 +274,55 @@ class EdgeServer:
         self.edge_id = edge_id  # edge server number
         self.loc = loc      # 位置
         self.capability = 1e9 * 0.063  # 所有edge server 的总承载能力
-        self.user_group = []
+        self.user_group = []        # edge端记录正在服务的user的id
         self.limit = LIMIT
-        self.connection_num = 0
+        self.connection_num = 0     # edge端记录正在连接的user的数量
 
-    def maintain_request(self, R, U):
+    # 对每个edge处理所有的user的request的状况
+    def maintain_request(self, R, U):       # self是一个edge
         for user in U:
-            # the number of the connection user
+            # the number of the connection user      edge的user连接数目，每一次的循环有可能会发生改变，所以循环开始要统计connection_num
             self.connection_num = 0
             for user_id in self.user_group:
-                if U[user_id].req.state != 6:
+                if U[user_id].req.state != 6:       # 迁移的user不记录在内
                     self.connection_num += 1
-            # maintain the request
-            if user.req.edge_id == self.edge_id and self.capability - R[user.user_id] > 0:
-                # maintain the preliminary connection
+            # maintain the request  维持请求
+            if user.req.edge_id == self.edge_id and self.capability - R[user.user_id] > 0:      # TODO 为什么等于0不可以，一定留下空余
+                # maintain the preliminary connection   初次连接
                 if user.req.user_id not in self.user_group and self.connection_num + 1 <= self.limit:
                     # first time : do not belong to any edge(user_group)
                     self.user_group.append(user.user_id)  # add to the user_group
                     user.req.state = 0  # prepare to connect
-                    # notify the request
-                    user.req.edge_id = self.edge_id
+                    # notify the request    通知请求
+                    user.req.edge_id = self.edge_id     # float 变成 int， 值不变
                     user.req.edge_loc = self.loc
 
-                # dispatch the resource
+                # dispatch the resource     调度资源
                 user.req.resource = R[user.user_id]
                 self.capability -= R[user.user_id]
 
-    def migration_update(self, O, B, table, U, E):
+    def migration_update(self, O, B, table, U, E):      # self是一个edge
 
         # maintain the the migration
-        for user_id in self.user_group:
-            # prepare to migration
+        for user_id in self.user_group:     # 对edge中正在服务的user（存储在user_group中）依次进行操作
+            # prepare to migration  即 要求的edge 与 要卸载的edge 不符
             if U[user_id].req.edge_id != O[user_id]:
                 # initial
-                ini_edge = int(U[user_id].req.edge_id)
-                target_edge = int(O[user_id])
-                if table[ini_edge][target_edge] - B[user_id] >= 0:
+                ini_edge = int(U[user_id].req.edge_id)      # 源edge：从此处开始迁移
+                target_edge = int(O[user_id])               # 目标edge：迁移到此为止
+                if table[ini_edge][target_edge] - B[user_id] >= 0:      # 带宽充足，若带宽不足则直接存储预卸载
                     # on the way to migration, but offloading to another edge computer(step 1)
                     if U[user_id].req.state == 6 and target_edge != U[user_id].req.last_offlaoding:
                         # reduce the bandwidth
                         table[ini_edge][target_edge] -= B[user_id]
                         # start migration
-                        U[user_id].req.mig_size = U[user_id].req.tasktype.migration_size
+                        U[user_id].req.mig_size = U[user_id].req.tasktype.migration_size    # mig_size 的初始化
                         U[user_id].req.mig_size -= B[user_id]
                         # print("user", U[user_id].req.user_id, ":migration step 1")
+
                     # first try to migration(step 1)
                     elif U[user_id].req.state != 6:
+                        # reduce the bandwidth
                         table[ini_edge][target_edge] -= B[user_id]
                         # start migration
                         U[user_id].req.mig_size = U[user_id].req.tasktype.migration_size
@@ -323,36 +332,36 @@ class EdgeServer:
                         # on the way to migration, disconnect to the old edge
                         U[user_id].req.state = 6
                         # print("user", U[user_id].req.user_id, ":migration step 1")
+                    # 迁移到达最终的 edge
                     elif U[user_id].req.state == 6 and target_edge == U[user_id].req.last_offlaoding:
                         # keep migration(step 2)
-                        if U[user_id].req.mig_size > 0:
+                        if U[user_id].req.mig_size > 0:     # 还有需要迁移的内容
                             # reduce the bandwidth
                             table[ini_edge][target_edge] -= B[user_id]
                             U[user_id].req.mig_size -= B[user_id]
                             # print("user", U[user_id].req.user_id, ":migration step 2")
                         # end the migration(step 3)
                         else:
-                            # the number of the connection user
+                            # the number of the connection user     统计连接的user数量
                             target_connection_num = 0
                             for target_user_id in E[target_edge].user_group:
                                 if U[target_user_id].req.state != 6:
                                     target_connection_num += 1
                             # print("user", U[user_id].req.user_id, ":migration step 3")
                             # change to another edge
-                            if E[target_edge].capability - U[user_id].req.resource >= 0 and target_connection_num + 1 <= \
-                                    E[target_edge].limit:
+                            if E[target_edge].capability - U[user_id].req.resource >= 0 and target_connection_num + 1 <= E[target_edge].limit:
                                 # register in the new edge
-                                E[target_edge].capability -= U[user_id].req.resource
-                                E[target_edge].user_group.append(user_id)
-                                self.user_group.remove(user_id)
+                                E[target_edge].capability -= U[user_id].req.resource    # user会占用edge的部分资源
+                                E[target_edge].user_group.append(user_id)       # 添加已经迁移的user
+                                self.user_group.remove(user_id)     # 去除已经迁移的user
                                 # update the request
                                 # id
                                 U[user_id].req.edge_id = E[target_edge].edge_id
                                 U[user_id].req.edge_loc = E[target_edge].loc
                                 # release the pre-state, continue to transmission process
-                                U[user_id].req.state = U[user_id].req.pre_state
+                                U[user_id].req.state = U[user_id].req.pre_state     # 恢复迁移之前保留的状态
                                 # print("user", U[user_id].req.user_id, ":migration finish")
-            # store pre_offloading
+            # store pre_offloading      # 存储预卸载（接下来要卸载的user）
             U[user_id].req.last_offlaoding = int(O[user_id])
 
         return table
@@ -437,19 +446,22 @@ class priority_policy():
 class Env:
     def __init__(self):
         self.step = 30
-        self.time = 0
+        self.time = 0       # 时间，就是每一个数据移动时间间隔
         self.edge_num = EDGE_NUM  # the number of servers
         self.user_num = USER_NUM  # the number of users
         # define environment object
         self.reward_all = []
         self.U = []  # 记录采样的user_num个user
-        self.fin_req_count = 0
-        self.prev_count = 0
+
+        # 关于rewards计算的变量， 前一个 - 后一个
+        self.fin_req_count = 0      # reward 记录完成了多少个请求
+        self.prev_count = 0         #
         self.rewards = 0
-        self.R = np.zeros((self.user_num))
-        self.O = np.zeros((self.user_num))
-        self.B = np.zeros((self.user_num))
-        self.table = BandwidthTable(self.edge_num)  # edge之间带宽的记录表
+
+        self.R = np.zeros((self.user_num))      # 记录每个user所需的resource
+        self.O = np.zeros((self.user_num))      # offloading 存储需要卸载的user的记录
+        self.B = np.zeros((self.user_num))      # 每次迁移的最小单位
+        self.table = BandwidthTable(self.edge_num)  # edge之间带宽的记录表      table（源edge， 目标edge）
         self.priority = np.zeros((self.user_num, self.edge_num))
         self.E = []  # EdgeServer
         self.x_min, self.y_min = get_minimum()  # data表中最小的x, y
@@ -490,7 +502,7 @@ class Env:
         self.reward_all = []
         # user，采样user_num个user
         self.U = []     # 记录采样的user_num个user，每个是UE的实例，user的id由0到1
-        self.fin_req_count = 0
+        self.fin_req_count = 0      # reward 记录完成了多少个请求
         self.prev_count = 0
         data_num = random.sample(list(range(TXT_NUM)), self.user_num)  # data集中随机选取user_num个txt文件，记录文件序号
         for i in range(self.user_num):
@@ -536,14 +548,14 @@ class Env:
         # resource update
         self.R = a[:r_dim]
         # bandwidth update
-        self.B = a[r_dim:r_dim + b_dim]
+        self.B = a[r_dim:r_dim + b_dim]     # 每次迁移的最小单位
         # offloading update
-        base = r_dim + b_dim
-        for user_id in range(self.user_num):
-            prob_weights = a[base:base + self.edge_num]
+        base = r_dim + b_dim        # 20
+        for user_id in range(self.user_num):        # TODO action a[20, 120) 记录权重？
+            prob_weights = a[base: base + self.edge_num]        # 权重weight
             # print("user", user_id, ":", prob_weights)
-            action = np.random.choice(range(len(prob_weights)),
-                                      p=prob_weights.ravel())  # select action w.r.t the actions prob
+            # select action w.r.t the actions prob  选择那个edge      按照weight，随机从[0,10) 中随机选一个数字， p实际是个数组，大小（size）应该与指定的a相同，用来规定选取a中每个元素的概率，
+            action = np.random.choice(range(len(prob_weights)), p = prob_weights.ravel())       # ravel() 将多维数组转换为一维数组
             base += self.edge_num
             self.O[user_id] = action
 
@@ -552,28 +564,28 @@ class Env:
             # update the state of the request
             user.request_update()
             if user.req.timer >= 5:
-                user.generate_request(self.O[user.user_id])  # offload according to the priority
+                user.generate_request(self.O[user.user_id])  # offload according to the priority 按优先级卸载
             # it has already finished the request
             if user.req.state == 4:
-                # rewards
-                self.fin_req_count += 1
+                # rewards 记录完成了多少个请求
+                self.fin_req_count += 1     # 完成请求数 +1
                 user.req.state = 5  # request turn to "disconnect"
                 self.E[int(user.req.edge_id)].user_group.remove(user.req.user_id)
                 user.generate_request(self.O[user.user_id])  # offload according to the priority
 
         # edge update
         for edge in self.E:
-            edge.maintain_request(self.R, self.U)
-            self.table = edge.migration_update(self.O, self.B, self.table, self.U, self.E)
+            edge.maintain_request(self.R, self.U)       # 对每个edge处理所有的user的request的状况
+            self.table = edge.migration_update(self.O, self.B, self.table, self.U, self.E)      # table ，edge之间带宽的记录
 
         # rewards
         self.rewards = self.fin_req_count - self.prev_count
         self.prev_count = self.fin_req_count
 
-        # every user start to move
-        if self.time % self.step == 0:
+        # every user start to move      根据时间更新移动位置
+        if self.time % self.step == 0:      # 以30次为一个step划分移动数据，
             for user in self.U:
-                user.mobility_update(self.time)
+                user.mobility_update(self.time)     # 更新移动位置
 
         # update time
         self.time += 1
@@ -592,7 +604,7 @@ class Env:
             print("user", user, " offload probabilty:", a[base:base + self.edge_num])
             base += self.edge_num
         """
-        print("O:", self.O)
+        print("O:", self.O)     # O: [9. 9. 2. 0. 9. 2. 9. 0. 6. 2.] 初始情况
         # 打印每个user的loc、request state、edge serve
         for user in self.U:
             print("user", user.user_id, "'s loc:\n", user.loc)
@@ -605,7 +617,7 @@ class Env:
         print("reward:", self.rewards)
         print("=====================update==============================")
 
-    # 初始化屏幕
+    # 初始化屏幕：创建画布，初始化目标user edge
     def initial_screen_demo(self):
         self.canvas = render.Demo(self.E, self.U, self.O, MAX_EP_STEPS)
 
